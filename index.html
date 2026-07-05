@@ -2,7 +2,11 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#1a1a2e">
     <title>Pixel Rogue Cards - 像素卡牌地牢</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
@@ -21,6 +25,10 @@
             align-items: center;
             min-height: 100vh;
             overflow: hidden;
+            touch-action: none;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
         }
         
         #game-container {
@@ -31,6 +39,8 @@
         canvas {
             image-rendering: pixelated;
             image-rendering: crisp-edges;
+            max-width: 100%;
+            max-height: 100vh;
         }
         
         .loading {
@@ -52,6 +62,13 @@
             font-size: 10px;
             text-align: center;
             line-height: 1.8;
+            display: none;
+        }
+        
+        @media (min-width: 768px) {
+            .instructions {
+                display: block;
+            }
         }
     </style>
 </head>

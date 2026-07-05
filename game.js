@@ -1,5 +1,5 @@
 /**
- * Pixel Rogue Cards - 像素卡牌地牢
+ * Pixel Rogue Cards - 像素卡牌地牢（移动端适配版）
  * 一个完整的卡牌构筑类肉鸽游戏
  */
 
@@ -22,6 +22,19 @@ const CONFIG = {
         cardDefense: '#3498db',
         cardSkill: '#9b59b6',
         cardPower: '#f39c12'
+    },
+    // 移动端配置
+    MOBILE: {
+        CARD_WIDTH: 100,
+        CARD_HEIGHT: 150,
+        HAND_Y: 550,
+        CARD_SPACING: 15
+    },
+    DESKTOP: {
+        CARD_WIDTH: 140,
+        CARD_HEIGHT: 200,
+        HAND_Y: 550,
+        CARD_SPACING: 20
     }
 };
 
@@ -125,20 +138,104 @@ class Game {
         this.hoverCard = null;
         this.animations = [];
         this.particles = [];
+        this.isMobile = this.detectMobile();
+        this.scale = 1;
+        this.touchStartPos = null;
         
         this.init();
     }
     
+    detectMobile() {
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+               window.innerWidth < 768;
+    }
+    
+    setupCanvas() {
+        const resize = () => {
+            const rect = this.canvas.getBoundingClientRect();
+            const containerWidth = rect.width || window.innerWidth;
+            const containerHeight = rect.height || window.innerHeight;
+            
+            // 计算缩放比例
+            const scaleX = containerWidth / CONFIG.CANVAS_WIDTH;
+            const scaleY = containerHeight / CONFIG.CANVAS_HEIGHT;
+            this.scale = Math.min(scaleX, scaleY);
+            
+            // 设置 canvas 尺寸
+            this.canvas.width = CONFIG.CANVAS_WIDTH;
+            this.canvas.height = CONFIG.CANVAS_HEIGHT;
+            
+            // 设置 canvas 显示大小
+            this.canvas.style.width = '100%';
+            this.canvas.style.height = '100%';
+        };
+        
+        resize();
+        window.addEventListener('resize', resize);
+    }
+    
     init() {
         document.getElementById('loading').style.display = 'none';
+        this.setupCanvas();
         this.setupInput();
         this.gameLoop();
     }
     
     setupInput() {
+        // 鼠标事件
         this.canvas.addEventListener('click', (e) => this.handleClick(e));
         this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
         document.addEventListener('keydown', (e) => this.handleKeyDown(e));
+        
+        // 触摸事件
+        if (this.isMobile) {
+            this.canvas.addEventListener('touchstart', (e) => this.handleTouchStart(e), { passive: false });
+            this.canvas.addEventListener('touchmove', (e) => this.handleTouchMove(e), { passive: false });
+            this.canvas.addEventListener('touchend', (e) => this.handleTouchEnd(e), { passive: false });
+            this.canvas.addEventListener('touchcancel', (e) => this.handleTouchEnd(e), { passive: false });
+        }
+        
+        // 阻止移动端默认缩放行为
+        document.addEventListener('gesturestart', (e) => e.preventDefault(), { passive: false });
+        document.addEventListener('gesturechange', (e) => e.preventDefault(), { passive: false });
+        document.addEventListener('gestureend', (e) => e.preventDefault(), { passive: false });
+    }
+    
+    handleTouchStart(e) {
+        e.preventDefault();
+        const touch = e.touches[0];
+        const rect = this.canvas.getBoundingClientRect();
+        const x = (touch.clientX - rect.left) / this.scale;
+        const y = (touch.clientY - rect.top) / this.scale;
+        
+        this.touchStartPos = { x, y, time: Date.now() };
+    }
+    
+    handleTouchMove(e) {
+        e.preventDefault();
+    }
+    
+    handleTouchEnd(e) {
+        e.preventDefault();
+        if (!this.touchStartPos) return;
+        
+        const touch = e.changedTouches[0];
+        const rect = this.canvas.getBoundingClientRect();
+        const x = (touch.clientX - rect.left) / this.scale;
+        const y = (touch.clientY - rect.top) / this.scale;
+        
+        const duration = Date.now() - this.touchStartPos.time;
+        const distance = Math.sqrt(
+            Math.pow(x - this.touchStartPos.x, 2) + 
+            Math.pow(y - this.touchStartPos.y, 2)
+        );
+        
+        // 如果是点击（时间短、距离小）
+        if (duration < 500 && distance < 10) {
+            this.handleClick({ clientX: touch.clientX, clientY: touch.clientY });
+        }
+        
+        this.touchStartPos = null;
     }
     
     startNewGame() {
@@ -155,7 +252,7 @@ class Game {
         };
         this.gold = 99;
         this.floor = 1;
-        this.relics = [{ ...RELICS[0] }]; // 初始遗物
+        this.relics = [{ ...RELICS[0] }];
         this.deck = this.createStarterDeck();
         this.map = this.generateMap();
         this.currentNode = this.map[0][0];
@@ -164,15 +261,12 @@ class Game {
     
     createStarterDeck() {
         const deck = [];
-        // 5张打击
         for (let i = 0; i < 5; i++) {
             deck.push(this.createCard('strike'));
         }
-        // 4张防御
         for (let i = 0; i < 4; i++) {
             deck.push(this.createCard('defend'));
         }
-        // 1张抽牌
         deck.push(this.createCard('draw'));
         return deck;
     }
@@ -212,7 +306,6 @@ class Game {
                 });
             }
             
-            // 创建连接
             if (f > 0) {
                 const prevFloor = map[f - 1];
                 floorNodes.forEach(node => {
@@ -242,7 +335,6 @@ class Game {
         this.exhaustPile = [];
         this.player.block = 0;
         
-        // 创建敌人
         if (!enemyType) {
             const availableEnemies = ENEMY_TYPES.filter(e => !e.isElite || this.currentNode?.type === 'elite');
             enemyType = availableEnemies[Math.floor(Math.random() * availableEnemies.length)];
@@ -296,14 +388,12 @@ class Game {
     }
     
     processStartOfTurnEffects() {
-        // 应用遗物效果
         this.relics.forEach(relic => {
             if (relic.effect === 'block_per_turn') {
                 this.player.block += relic.value;
             }
         });
         
-        // 减少负面状态
         if (this.player.vulnerable > 0) this.player.vulnerable--;
         if (this.player.weak > 0) this.player.weak--;
     }
@@ -315,22 +405,15 @@ class Game {
         this.player.energy -= card.cost;
         this.hand.splice(cardIndex, 1);
         
-        // 执行卡牌效果
         this.executeCardEffect(card);
-        
-        // 处理遗物效果
         this.processCardPlayEffects(card);
-        
         this.discardPile.push(card);
         
-        // 检查战斗结束
         this.checkCombatEnd();
-        
         return true;
     }
     
     executeCardEffect(card) {
-        // 造成伤害
         if (card.damage) {
             let damage = card.damage;
             if (this.player.strength > 0) damage += this.player.strength;
@@ -343,41 +426,34 @@ class Game {
             if (card.weak) this.currentEnemy.weak += card.weak;
         }
         
-        // 获得护甲
         if (card.block) {
             let block = card.block;
             if (this.player.dexterity > 0) block += this.player.dexterity;
             this.player.block += block;
         }
         
-        // 抽牌
         if (card.draw) {
             this.drawCards(card.draw);
         }
         
-        // 获得力量
         if (card.strength) {
             this.player.strength += card.strength;
         }
         
-        // 获得能量
         if (card.energy) {
             this.player.energy += card.energy;
         }
         
-        // 失去生命
         if (card.hpLoss) {
             this.player.hp -= card.hpLoss;
         }
         
-        // 护甲翻倍
         if (card.blockMultiplier) {
             this.player.block = Math.floor(this.player.block * card.blockMultiplier);
         }
     }
     
     processCardPlayEffects(card) {
-        // 这里可以处理遗物触发的额外效果
     }
     
     dealDamageToEnemy(damage) {
@@ -385,7 +461,6 @@ class Game {
         this.currentEnemy.block = Math.max(0, this.currentEnemy.block - damage);
         this.currentEnemy.hp -= actualDamage;
         
-        // 添加伤害动画
         this.addAnimation('damage', 800, 300, actualDamage);
         this.addParticles(800, 300, this.currentEnemy.color, 10);
     }
@@ -404,17 +479,14 @@ class Game {
     }
     
     endTurn() {
-        // 丢弃手牌
         this.discardPile.push(...this.hand);
         this.hand = [];
         
-        // 敌人行动
         this.enemyAction();
         
-        // 检查战斗结束
         if (!this.checkCombatEnd()) {
             this.turn++;
-            this.player.block = 0; // 回合结束护甲消失（除非有遗物）
+            this.player.block = 0;
             this.startTurn();
         }
     }
@@ -450,7 +522,6 @@ class Game {
         const goldReward = this.currentEnemy.gold;
         this.gold += goldReward;
         
-        // 战斗结束后回血
         this.relics.forEach(relic => {
             if (relic.effect === 'heal_end_combat') {
                 this.player.hp = Math.min(this.player.maxHp, this.player.hp + relic.value);
@@ -467,7 +538,6 @@ class Game {
             cards: []
         };
         
-        // 生成卡牌奖励
         const rewardCount = Math.random() < 0.3 ? 3 : 2;
         for (let i = 0; i < rewardCount; i++) {
             const rarity = Math.random() < 0.1 ? Rarity.RARE : 
@@ -513,42 +583,32 @@ class Game {
         this.ctx.fillStyle = CONFIG.COLORS.text;
         this.ctx.font = 'bold 48px "Press Start 2P"';
         this.ctx.textAlign = 'center';
-        this.ctx.fillText('PIXEL ROGUE CARDS', CONFIG.CANVAS_WIDTH / 2, 250);
+        this.ctx.fillText('PIXEL ROGUE', CONFIG.CANVAS_WIDTH / 2, 250);
         
         this.ctx.fillStyle = CONFIG.COLORS.textLight;
         this.ctx.font = '20px "Press Start 2P"';
-        this.ctx.fillText('像素卡牌地牢', CONFIG.CANVAS_WIDTH / 2, 320);
+        this.ctx.fillText('CARDS', CONFIG.CANVAS_WIDTH / 2, 320);
         
-        // 开始按钮
         this.drawButton(CONFIG.CANVAS_WIDTH / 2 - 150, 450, 300, 60, '开始游戏', '#e94560');
         
         this.ctx.font = '14px "Press Start 2P"';
         this.ctx.fillStyle = '#888';
-        this.ctx.fillText('点击开始游戏', CONFIG.CANVAS_WIDTH / 2, 600);
+        this.ctx.fillText('点击开始', CONFIG.CANVAS_WIDTH / 2, 600);
     }
     
     renderMap() {
-        // 标题
         this.ctx.fillStyle = CONFIG.COLORS.text;
         this.ctx.font = 'bold 24px "Press Start 2P"';
         this.ctx.textAlign = 'left';
         this.ctx.fillText(`第 ${this.floor} 层`, 50, 50);
         
-        // 玩家信息
         this.renderPlayerInfo(50, 80);
         
-        // 渲染地图节点
         this.map.forEach((floor, floorIndex) => {
             floor.forEach(node => {
                 this.renderMapNode(node);
             });
         });
-        
-        // 提示文字
-        this.ctx.font = '12px "Press Start 2P"';
-        this.ctx.fillStyle = '#888';
-        this.ctx.textAlign = 'center';
-        this.ctx.fillText('点击节点选择路线', CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT - 50);
     }
     
     renderMapNode(node) {
@@ -556,7 +616,6 @@ class Game {
         const x = node.x;
         const y = node.y;
         
-        // 渲染连接线
         node.connections.forEach(prevNode => {
             this.ctx.strokeStyle = node.visited || prevNode.visited ? '#e94560' : '#444';
             this.ctx.lineWidth = 2;
@@ -566,19 +625,16 @@ class Game {
             this.ctx.stroke();
         });
         
-        // 节点颜色
         let color = '#555';
         if (node.visited) color = '#27ae60';
         else if (node === this.currentNode) color = '#e94560';
         else if (node.connections.some(c => c.visited)) color = '#f39c12';
         
-        // 节点图标
         this.ctx.fillStyle = color;
         this.ctx.beginPath();
         this.ctx.arc(x, y, size / 2, 0, Math.PI * 2);
         this.ctx.fill();
         
-        // 节点类型图标
         this.ctx.fillStyle = '#fff';
         this.ctx.font = '16px Arial';
         this.ctx.textAlign = 'center';
@@ -597,20 +653,12 @@ class Game {
     }
     
     renderCombat() {
-        // 背景
         this.ctx.fillStyle = '#0f0f23';
         this.ctx.fillRect(0, 0, CONFIG.CANVAS_WIDTH, CONFIG.CANVAS_HEIGHT);
         
-        // 渲染敌人
         this.renderEnemy();
-        
-        // 渲染玩家
         this.renderPlayer();
-        
-        // 渲染手牌
         this.renderHand();
-        
-        // 渲染UI
         this.renderCombatUI();
     }
     
@@ -618,22 +666,18 @@ class Game {
         const x = 800;
         const y = 200;
         
-        // 敌人精灵（像素风格）
         this.ctx.fillStyle = this.currentEnemy.color;
         const size = 120;
         this.ctx.fillRect(x - size/2, y, size, size);
         
-        // 像素细节
         this.ctx.fillStyle = '#000';
         this.ctx.fillRect(x - 30, y + 30, 15, 15);
         this.ctx.fillRect(x + 15, y + 30, 15, 15);
         this.ctx.fillRect(x - 20, y + 70, 40, 10);
         
-        // 血条
         const hpPercent = this.currentEnemy.hp / this.currentEnemy.maxHp;
         this.renderBar(x - 60, y - 40, 120, 15, hpPercent, '#e74c3c', `HP: ${this.currentEnemy.hp}/${this.currentEnemy.maxHp}`);
         
-        // 护甲
         if (this.currentEnemy.block > 0) {
             this.ctx.fillStyle = '#95a5a6';
             this.ctx.fillRect(x + 70, y - 40, 25, 25);
@@ -643,10 +687,8 @@ class Game {
             this.ctx.fillText(this.currentEnemy.block, x + 82, y - 27);
         }
         
-        // 意图
         this.renderIntent(x, y - 80);
         
-        // 名字
         this.ctx.fillStyle = '#fff';
         this.ctx.font = 'bold 16px "Press Start 2P"';
         this.ctx.textAlign = 'center';
@@ -668,7 +710,6 @@ class Game {
         if (intent === Intent.DEFEND) icon = '🛡';
         this.ctx.fillText(icon, x, y);
         
-        // 伤害数值
         if (intent === Intent.ATTACK) {
             this.ctx.fillStyle = '#e74c3c';
             this.ctx.font = '14px "Press Start 2P"';
@@ -680,23 +721,19 @@ class Game {
         const x = 200;
         const y = 300;
         
-        // 玩家精灵
         this.ctx.fillStyle = '#3498db';
         const size = 100;
         this.ctx.fillRect(x - size/2, y, size, size);
         
-        // 像素细节
         this.ctx.fillStyle = '#fff';
         this.ctx.fillRect(x - 25, y + 25, 12, 12);
         this.ctx.fillRect(x + 13, y + 25, 12, 12);
         this.ctx.fillStyle = '#2c3e50';
         this.ctx.fillRect(x - 20, y + 65, 40, 8);
         
-        // 血条
         const hpPercent = this.player.hp / this.player.maxHp;
         this.renderBar(x - 60, y - 40, 120, 15, hpPercent, '#e74c3c', `HP: ${this.player.hp}/${this.player.maxHp}`);
         
-        // 能量
         this.ctx.fillStyle = '#3498db';
         this.ctx.beginPath();
         this.ctx.arc(x - 80, y + 50, 25, 0, Math.PI * 2);
@@ -707,7 +744,6 @@ class Game {
         this.ctx.textBaseline = 'middle';
         this.ctx.fillText(this.player.energy, x - 80, y + 50);
         
-        // 护甲
         if (this.player.block > 0) {
             this.ctx.fillStyle = '#95a5a6';
             this.ctx.beginPath();
@@ -719,15 +755,12 @@ class Game {
     }
     
     renderBar(x, y, width, height, percent, color, text) {
-        // 背景
         this.ctx.fillStyle = '#333';
         this.ctx.fillRect(x, y, width, height);
         
-        // 填充
         this.ctx.fillStyle = color;
         this.ctx.fillRect(x, y, width * percent, height);
         
-        // 文字
         this.ctx.fillStyle = '#fff';
         this.ctx.font = '10px "Press Start 2P"';
         this.ctx.textAlign = 'center';
@@ -736,11 +769,12 @@ class Game {
     }
     
     renderHand() {
-        const cardWidth = 140;
-        const cardHeight = 200;
-        const spacing = 20;
+        const config = this.isMobile ? CONFIG.MOBILE : CONFIG.DESKTOP;
+        const cardWidth = config.CARD_WIDTH;
+        const cardHeight = config.CARD_HEIGHT;
+        const spacing = config.CARD_SPACING;
         const startX = (CONFIG.CANVAS_WIDTH - (this.hand.length * (cardWidth + spacing) - spacing)) / 2;
-        const y = 550;
+        const y = config.HAND_Y;
         
         this.hand.forEach((card, index) => {
             const x = startX + index * (cardWidth + spacing);
@@ -754,7 +788,6 @@ class Game {
     renderCard(card, x, y, width, height, isSelected, canPlay, index) {
         const yOffset = isSelected ? -30 : 0;
         
-        // 卡牌背景
         let bgColor = CONFIG.COLORS.panel;
         switch (card.type) {
             case CardType.ATTACK: bgColor = CONFIG.COLORS.cardAttack; break;
@@ -765,36 +798,32 @@ class Game {
         
         if (!canPlay) bgColor = '#444';
         
-        // 阴影
         this.ctx.fillStyle = 'rgba(0,0,0,0.3)';
         this.ctx.fillRect(x + 5, y + yOffset + 5, width, height);
         
-        // 卡牌主体
         this.ctx.fillStyle = bgColor;
         this.ctx.fillRect(x, y + yOffset, width, height);
         
-        // 边框
         this.ctx.strokeStyle = canPlay ? '#fff' : '#666';
         this.ctx.lineWidth = isSelected ? 4 : 2;
         this.ctx.strokeRect(x, y + yOffset, width, height);
         
-        // 费用
+        const fontSize = this.isMobile ? 14 : 18;
         this.ctx.fillStyle = '#f39c12';
         this.ctx.beginPath();
         this.ctx.arc(x + 20, y + yOffset + 25, 18, 0, Math.PI * 2);
         this.ctx.fill();
         this.ctx.fillStyle = '#000';
-        this.ctx.font = 'bold 18px "Press Start 2P"';
+        this.ctx.font = `bold ${fontSize}px "Press Start 2P"`;
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
         this.ctx.fillText(card.cost, x + 20, y + yOffset + 25);
         
-        // 名字
+        const nameSize = this.isMobile ? 10 : 12;
         this.ctx.fillStyle = '#fff';
-        this.ctx.font = 'bold 12px "Press Start 2P"';
+        this.ctx.font = `bold ${nameSize}px "Press Start 2P"`;
         this.ctx.fillText(card.name, x + width / 2, y + yOffset + 30);
         
-        // 类型
         this.ctx.fillStyle = 'rgba(255,255,255,0.7)';
         this.ctx.font = '8px "Press Start 2P"';
         const typeText = {
@@ -805,15 +834,13 @@ class Game {
         };
         this.ctx.fillText(typeText[card.type], x + width / 2, y + yOffset + 50);
         
-        // 描述
         this.ctx.fillStyle = '#fff';
         this.ctx.font = '8px "Press Start 2P"';
-        this.wrapText(card.description, x + 10, y + yOffset + 80, width - 20, 14);
+        this.wrapText(card.description, x + 10, y + yOffset + 80, width - 20, 12);
         
-        // 快捷键数字
         if (index < 5) {
             this.ctx.fillStyle = 'rgba(255,255,255,0.3)';
-            this.ctx.font = '24px "Press Start 2P"';
+            this.ctx.font = `${this.isMobile ? 18 : 24}px "Press Start 2P"`;
             this.ctx.fillText(index + 1, x + width - 25, y + yOffset + height - 20);
         }
     }
@@ -839,20 +866,13 @@ class Game {
     }
     
     renderCombatUI() {
-        // 结束回合按钮
-        this.drawButton(1000, 600, 150, 50, '结束回合', '#e74c3c');
+        const endTurnX = this.isMobile ? 950 : 1000;
+        this.drawButton(endTurnX, 600, 150, 50, '结束回合', '#e74c3c');
         
-        // 回合数
         this.ctx.fillStyle = '#fff';
         this.ctx.font = '16px "Press Start 2P"';
         this.ctx.textAlign = 'left';
         this.ctx.fillText(`回合 ${this.turn}`, 50, 50);
-        
-        // 牌堆信息
-        this.ctx.fillStyle = '#888';
-        this.ctx.font = '12px "Press Start 2P"';
-        this.ctx.fillText(`抽牌堆: ${this.deck.length}`, 50, CONFIG.CANVAS_HEIGHT - 100);
-        this.ctx.fillText(`弃牌堆: ${this.discardPile.length}`, 50, CONFIG.CANVAS_HEIGHT - 80);
     }
     
     renderReward() {
@@ -870,12 +890,11 @@ class Game {
         
         this.ctx.fillStyle = '#fff';
         this.ctx.font = '18px "Press Start 2P"';
-        this.ctx.fillText('选择一张卡牌加入你的卡组：', CONFIG.CANVAS_WIDTH / 2, 300);
+        this.ctx.fillText('选择一张卡牌', CONFIG.CANVAS_WIDTH / 2, 300);
         
-        // 渲染奖励卡牌
-        const cardWidth = 180;
-        const cardHeight = 260;
-        const spacing = 40;
+        const cardWidth = this.isMobile ? 130 : 180;
+        const cardHeight = this.isMobile ? 200 : 260;
+        const spacing = 30;
         const startX = (CONFIG.CANVAS_WIDTH - (this.currentRewards.cards.length * (cardWidth + spacing) - spacing)) / 2;
         
         this.currentRewards.cards.forEach((card, index) => {
@@ -884,8 +903,7 @@ class Game {
             this.renderCard(card, x, y, cardWidth, cardHeight, false, true, index);
         });
         
-        // 跳过按钮
-        this.drawButton(CONFIG.CANVAS_WIDTH / 2 - 75, 700, 150, 50, '跳过', '#666');
+        this.drawButton(CONFIG.CANVAS_WIDTH / 2 - 75, 650, 150, 50, '跳过', '#666');
     }
     
     renderGameOver() {
@@ -905,7 +923,6 @@ class Game {
     }
     
     renderPlayerInfo(x, y) {
-        // HP
         this.ctx.fillStyle = '#e74c3c';
         this.ctx.fillRect(x, y, 150, 20);
         const hpPercent = this.player.hp / this.player.maxHp;
@@ -916,32 +933,26 @@ class Game {
         this.ctx.textAlign = 'center';
         this.ctx.fillText(`${this.player.hp}/${this.player.maxHp}`, x + 75, y + 13);
         
-        // 金币
         this.ctx.fillStyle = '#f39c12';
         this.ctx.font = '14px "Press Start 2P"';
         this.ctx.textAlign = 'left';
         this.ctx.fillText(`💰 ${this.gold}`, x, y + 45);
         
-        // 卡组数量
         this.ctx.fillStyle = '#3498db';
         this.ctx.fillText(`🃏 ${this.deck.length}`, x + 100, y + 45);
     }
     
     drawButton(x, y, width, height, text, color) {
-        // 阴影
         this.ctx.fillStyle = 'rgba(0,0,0,0.3)';
         this.ctx.fillRect(x + 4, y + 4, width, height);
         
-        // 按钮主体
         this.ctx.fillStyle = color;
         this.ctx.fillRect(x, y, width, height);
         
-        // 边框
         this.ctx.strokeStyle = '#fff';
         this.ctx.lineWidth = 2;
         this.ctx.strokeRect(x, y, width, height);
         
-        // 文字
         this.ctx.fillStyle = '#fff';
         this.ctx.font = '14px "Press Start 2P"';
         this.ctx.textAlign = 'center';
@@ -949,7 +960,6 @@ class Game {
         this.ctx.fillText(text, x + width / 2, y + height / 2);
     }
     
-    // 动画系统
     addAnimation(type, x, y, value) {
         this.animations.push({
             type,
@@ -979,7 +989,6 @@ class Game {
         });
     }
     
-    // 粒子系统
     addParticles(x, y, color, count) {
         for (let i = 0; i < count; i++) {
             this.particles.push({
@@ -999,7 +1008,7 @@ class Game {
             p.x += p.vx;
             p.y += p.vy;
             p.life--;
-            p.vy += 0.3; // 重力
+            p.vy += 0.3;
             
             const alpha = p.life / 30;
             this.ctx.fillStyle = p.color.replace(')', `, ${alpha})`).replace('rgb', 'rgba');
@@ -1014,22 +1023,19 @@ class Game {
         });
     }
     
-    // 输入处理
     handleClick(e) {
         const rect = this.canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+        const x = (e.clientX - rect.left) / this.scale;
+        const y = (e.clientY - rect.top) / this.scale;
         
         switch (this.state) {
             case GameState.MENU:
-                // 开始按钮
                 if (x >= 450 && x <= 750 && y >= 450 && y <= 510) {
                     this.startNewGame();
                 }
                 break;
                 
             case GameState.MAP:
-                // 检查点击的节点
                 this.map.forEach(floor => {
                     floor.forEach(node => {
                         if (node.connections.some(c => c.visited) || node === this.currentNode) {
@@ -1044,12 +1050,12 @@ class Game {
                 break;
                 
             case GameState.COMBAT:
-                // 检查卡牌点击
-                const cardWidth = 140;
-                const cardHeight = 200;
-                const spacing = 20;
+                const config = this.isMobile ? CONFIG.MOBILE : CONFIG.DESKTOP;
+                const cardWidth = config.CARD_WIDTH;
+                const cardHeight = config.CARD_HEIGHT;
+                const spacing = config.CARD_SPACING;
                 const startX = (CONFIG.CANVAS_WIDTH - (this.hand.length * (cardWidth + spacing) - spacing)) / 2;
-                const cardY = 550;
+                const cardY = config.HAND_Y;
                 
                 this.hand.forEach((card, index) => {
                     const cardX = startX + index * (cardWidth + spacing);
@@ -1059,17 +1065,16 @@ class Game {
                     }
                 });
                 
-                // 结束回合按钮
-                if (x >= 1000 && x <= 1150 && y >= 600 && y <= 650) {
+                const endTurnX = this.isMobile ? 950 : 1000;
+                if (x >= endTurnX && x <= endTurnX + 150 && y >= 600 && y <= 650) {
                     this.endTurn();
                 }
                 break;
                 
             case GameState.REWARD:
-                // 选择奖励卡牌
-                const rewardCardWidth = 180;
-                const rewardCardHeight = 260;
-                const rewardSpacing = 40;
+                const rewardCardWidth = this.isMobile ? 130 : 180;
+                const rewardCardHeight = this.isMobile ? 200 : 260;
+                const rewardSpacing = 30;
                 const rewardStartX = (CONFIG.CANVAS_WIDTH - (this.currentRewards.cards.length * (rewardCardWidth + rewardSpacing) - rewardSpacing)) / 2;
                 
                 this.currentRewards.cards.forEach((card, index) => {
@@ -1087,8 +1092,7 @@ class Game {
                     }
                 });
                 
-                // 跳过按钮
-                if (x >= 525 && x <= 675 && y >= 700 && y <= 750) {
+                if (x >= 525 && x <= 675 && y >= 650 && y <= 700) {
                     this.currentNode.visited = true;
                     this.floor++;
                     this.state = GameState.MAP;
@@ -1096,7 +1100,6 @@ class Game {
                 break;
                 
             case GameState.GAME_OVER:
-                // 重新开始按钮
                 if (x >= 450 && x <= 750 && y >= 500 && y <= 560) {
                     this.startNewGame();
                 }
@@ -1127,14 +1130,15 @@ class Game {
     
     handleMouseMove(e) {
         const rect = this.canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+        const x = (e.clientX - rect.left) / this.scale;
+        const y = (e.clientY - rect.top) / this.scale;
         
         if (this.state === GameState.COMBAT) {
-            const cardWidth = 140;
-            const spacing = 20;
+            const config = this.isMobile ? CONFIG.MOBILE : CONFIG.DESKTOP;
+            const cardWidth = config.CARD_WIDTH;
+            const spacing = config.CARD_SPACING;
             const startX = (CONFIG.CANVAS_WIDTH - (this.hand.length * (cardWidth + spacing) - spacing)) / 2;
-            const cardY = 550;
+            const cardY = config.HAND_Y;
             
             this.selectedCard = null;
             this.hand.forEach((card, index) => {
@@ -1149,21 +1153,18 @@ class Game {
     
     handleKeyDown(e) {
         if (this.state === GameState.COMBAT) {
-            // 数字键 1-5 出牌
             if (e.key >= '1' && e.key <= '5') {
                 const index = parseInt(e.key) - 1;
                 if (index < this.hand.length) {
                     this.playCard(index);
                 }
             }
-            // 空格结束回合
             else if (e.key === ' ') {
                 e.preventDefault();
                 this.endTurn();
             }
         }
         
-        // R键重新开始
         if (e.key === 'r' || e.key === 'R') {
             if (this.state === GameState.GAME_OVER || this.state === GameState.VICTORY) {
                 this.startNewGame();
@@ -1171,7 +1172,6 @@ class Game {
         }
     }
     
-    // 游戏循环
     gameLoop() {
         this.render();
         requestAnimationFrame(() => this.gameLoop());
